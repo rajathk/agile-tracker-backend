@@ -68,6 +68,19 @@ CREATE TABLE IF NOT EXISTS project_management."user"
     CONSTRAINT username UNIQUE (username)
 );
 
+ALTER TABLE project_management."task"
+    ADD CONSTRAINT fk_task_project
+        FOREIGN KEY (proj_id)
+            REFERENCES project_management.project(id)
+            ON DELETE CASCADE;
+
+
+ALTER TABLE project_management.attachment
+    ADD CONSTRAINT fk_task_attachment
+        FOREIGN KEY (task_id)
+            REFERENCES project_management.task(id)
+            ON DELETE CASCADE;
+
 INSERT INTO project_management."user"(
     name, email, password, org_role, created_on, modified_on, username, is_active)
     VALUES ('Rama', 'rama@gmail.com', '$2a$10$fhc9nZbDfBwnFo2kazfDOeOqjqOuVtLZ0sqKZJ8FF0xhKkiwit6hu', 'USER', now(), now(), 'rama', true);
