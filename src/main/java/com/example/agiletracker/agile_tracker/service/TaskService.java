@@ -10,6 +10,8 @@ import com.google.gson.JsonObject;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import java.util.List;
 
 @Slf4j
@@ -22,58 +24,77 @@ public class TaskService {
     @Autowired
     private TaskRepository taskRepository;
 
+    @Transactional(readOnly = true)
     public Task getTask(int id){
         log.info("task service: get task request received for id = {}", id);
-        return taskRepository.getTask(id);
+        return taskRepository.findById(id).orElse(null);
     }
 
+    @Transactional(readOnly = true)
     public List<Task> getAllTasks(int projectId){
         log.info("task service: get all tasks request received");
-        return taskRepository.getAllTasks(projectId);
+        return taskRepository.findByProjectId(projectId);
     }
 
+    @Transactional(readOnly = true)
+    public List<Task> getTasksByProjectAndStatus(int projectId,TaskStatus status){
+        log.info("task service: get tasks by status request received");
+        return taskRepository.findByProjectIdAndStatus(projectId, status);
+    }
+
+    @Transactional
     public Task createTask(Task task){
         log.info("task service: create task request received for task = {}", task);
-        TaskStatus taskStatus = switch (task.getStatus()) {
-            case "CREATED" -> TaskStatus.CREATED;
-            case "IN_PROGRESS" -> TaskStatus.IN_PROGRESS;
-            case "COMPLETED" -> TaskStatus.COMPLETED;
-            default -> TaskStatus.CANCELLED;
-        };
-        task.setStatus(taskStatus.toString());
-        task = taskRepository.create(task);
+        task.setStatus(TaskStatus.CREATED);
+        task = taskRepository.save(task);
+
         JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty("event", "new task created");
         return getTask(task, jsonObject);
     }
 
+    @Transactional
     public Task updateTask(int id, Task task){
         log.info("task service: update task request received for id = {} and task = {}", id, task);
-        TaskStatus taskStatus = switch (task.getStatus()) {
-            case "CREATED" -> TaskStatus.CREATED;
-            case "IN_PROGRESS" -> TaskStatus.IN_PROGRESS;
-            case "COMPLETED" -> TaskStatus.COMPLETED;
-            default -> TaskStatus.CANCELLED;
-        };
-        task.setStatus(taskStatus.toString());
-        task = taskRepository.update(id, task);
+        Task existingTask = taskRepository.findById(id).orElse(null);
+        if (existingTask == null) {
+            return null;
+        }
+        existingTask.setTitle(task.getTitle());
+        existingTask.setDescription(task.getDescription());
+        existingTask.setAssignee(task.getAssignee());
+        existingTask.setPriority(task.getPriority());
+        existingTask.setStatus(task.getStatus());
+        existingTask.setDueDate(task.getDueDate());
+        existingTask.setModifiedBy(task.getModifiedBy());
+        existingTask.setModifiedOn(task.getModifiedOn());
+
+        task.setStatus(task.getStatus());
+        existingTask = taskRepository.save(existingTask);
+
         JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty("event", "task updated");
-        return getTask(task, jsonObject);
+        return getTask(existingTask, jsonObject);
     }
-
-    private Task getTask(Task task1, JsonObject jsonObject) {
-        jsonObject.addProperty("project_id", task1.getProj_id());
+    @Transactional
+    protected Task getTask(Task task, JsonObject jsonObject) {
+        jsonObject.addProperty("project_id", task.getProject().getId());
         Audit audit = new Audit();
-        audit.setUser_id(task1.getCreated_by());
-        audit.setCreated_on(task1.getCreated_on());
+        audit.setUser_id(task.getCreatedBy());
+        audit.setCreated_on(task.getCreatedOn());
         audit.setEvent(jsonObject);
         auditService.createAudit(audit);
-        return task1;
+        return task;
     }
 
+    @Transactional
     public String deleteTask(int id){
         log.info("task service: delete task request received for id = {}", id);
-        return taskRepository.delete(id);
+        if (taskRepository.existsById(id)) {
+            taskRepository.deleteById(id);
+            return "Task deleted successfully";
+        } else {
+            return "Task not found";
+        }
     }
 }
